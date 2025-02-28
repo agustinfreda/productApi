@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 
@@ -39,6 +40,26 @@ func getProducts(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(products)
 }
 
+func createProduct(w http.ResponseWriter, r *http.Request) {
+	var newProduct Product
+	//guardar datos de la request
+	reqBody, err := io.ReadAll(r.Body)
+	if err != nil {
+		fmt.Fprintf(w, "Insert a Valid Product")
+	}
+
+	//asignando la info recibida a la variable.
+	json.Unmarshal(reqBody, &newProduct)
+
+	newProduct.ID = len(products) + 1
+	products = append(products, newProduct)
+
+	//respuesta al cliente
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(newProduct)
+}
+
 func indexRoute(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Welcome to my API")
 }
@@ -50,6 +71,7 @@ func main() {
 	// Rutas
 	router.HandleFunc("/", indexRoute)
 	router.HandleFunc("/products", getProducts).Methods("GET")
+	router.HandleFunc("/products", createProduct).Methods("POST")
 
 	// Server HTTP
 	log.Fatal(http.ListenAndServe(":4567", router))
