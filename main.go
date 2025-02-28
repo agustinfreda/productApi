@@ -133,6 +133,35 @@ func updateProduct(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func sellProduct(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	productID, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		return
+	}
+
+	// Buscar producto por índice y modificar el original
+	found := false
+	for i := range products {
+		if products[i].ID == productID {
+			if products[i].Stock > 0 {
+				products[i].Stock--
+				w.WriteHeader(http.StatusOK)
+				fmt.Fprintf(w, "You sold product with ID %v", productID)
+			} else {
+				http.Error(w, "Product out of stock", http.StatusConflict)
+			}
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		http.Error(w, "Product not found", http.StatusNotFound)
+	}
+}
+
 func indexRoute(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Welcome to my API")
 }
@@ -148,6 +177,7 @@ func main() {
 	router.HandleFunc("/products/{id}", getProduct).Methods("GET")
 	router.HandleFunc("/products/{id}", deleteProduct).Methods("DELETE")
 	router.HandleFunc("/products/{id}", updateProduct).Methods("PUT")
+	router.HandleFunc("/products/{id}/sell", sellProduct).Methods("PUT")
 
 	// Server HTTP
 	log.Fatal(http.ListenAndServe(":4567", router))
