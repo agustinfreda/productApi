@@ -96,6 +96,34 @@ func deleteProduct(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func updateProduct(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	productID, err := strconv.Atoi(vars["id"])
+
+	var updatedProduct product
+
+	if err != nil {
+		fmt.Fprintf(w, "Invalid ID")
+	}
+
+	reqBody, err := io.ReadAll(r.Body)
+	if err != nil {
+		fmt.Fprintf(w, "Please Enter Valid Data")
+	}
+
+	json.Unmarshal(reqBody, &updatedProduct)
+
+	for i, product := range products {
+		if product.ID == productID {
+			products = append(products[:i], products[i+1:]...)
+			updatedProduct.ID = productID
+			products = append(products, updatedProduct)
+
+			fmt.Fprintf(w, "The product with ID %v has been updated succesfully", productID)
+		}
+	}
+}
+
 func indexRoute(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Welcome to my API")
 }
@@ -110,6 +138,7 @@ func main() {
 	router.HandleFunc("/products", createProduct).Methods("POST")
 	router.HandleFunc("/products/{id}", getProduct).Methods("GET")
 	router.HandleFunc("/products/{id}", deleteProduct).Methods("DELETE")
+	router.HandleFunc("/products/{id}", updateProduct).Methods("PUT")
 
 	// Server HTTP
 	log.Fatal(http.ListenAndServe(":4567", router))
