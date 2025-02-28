@@ -8,6 +8,13 @@ import (
 	"github.com/gorilla/mux"
 )
 
+type Product struct {
+	ID    int    `json:ID`
+	Name  string `json:Name`
+	Price int    `json:Price`
+	Stock int    `json:Stock`
+}
+
 func indexRoute(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Welcome to my API")
 }
