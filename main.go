@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 
 	"github.com/gorilla/mux"
@@ -37,6 +38,14 @@ var products = allProducts{
 
 // PRODUCT FUNCTIONS
 func getProducts(w http.ResponseWriter, r *http.Request) {
+	sortParam := r.URL.Query().Get("sort")
+
+	if sortParam == "price" {
+		sort.Slice(products, func(i, j int) bool {
+			return products[i].Price > products[j].Price // Orden descendente
+		})
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(products)
 }
