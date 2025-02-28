@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/gorilla/mux"
 )
@@ -39,15 +40,25 @@ var products = allProducts{
 // PRODUCT FUNCTIONS
 func getProducts(w http.ResponseWriter, r *http.Request) {
 	sortParam := r.URL.Query().Get("sort")
+	searchParam := r.URL.Query().Get("name")
 
+	var searchSlice []Product
+	for _, product := range products {
+		// Filtrar productos que contienen el nombre buscado (insensible a mayúsculas/minúsculas)
+		if strings.Contains(strings.ToLower(product.Name), strings.ToLower(searchParam)) {
+			searchSlice = append(searchSlice, product)
+		}
+	}
+
+	// Si se especifica el parámetro "sort", ordenar los resultados filtrados
 	if sortParam == "price" {
-		sort.Slice(products, func(i, j int) bool {
-			return products[i].Price > products[j].Price // Orden descendente
+		sort.Slice(searchSlice, func(i, j int) bool {
+			return searchSlice[i].Price > searchSlice[j].Price // Orden descendente
 		})
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(products)
+	json.NewEncoder(w).Encode(searchSlice) // Devolver los productos filtrados y ordenados
 }
 
 func createProduct(w http.ResponseWriter, r *http.Request) {
