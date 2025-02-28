@@ -141,16 +141,27 @@ func sellProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Buscar producto por índice y modificar el original
+	sellParam := r.URL.Query().Get("amount")
+	amount := 1 // Por defecto se vende 1
+
+	if sellParam != "" {
+		amount, err = strconv.Atoi(sellParam)
+		if err != nil || amount <= 0 {
+			http.Error(w, "Invalid amount", http.StatusBadRequest)
+			return
+		}
+	}
+
+	// Buscar producto por índice y modificar el stock
 	found := false
 	for i := range products {
 		if products[i].ID == productID {
-			if products[i].Stock > 0 {
-				products[i].Stock--
+			if products[i].Stock >= amount {
+				products[i].Stock -= amount
 				w.WriteHeader(http.StatusOK)
-				fmt.Fprintf(w, "You sold product with ID %v", productID)
+				fmt.Fprintf(w, "You sold %d units of product with ID %v", amount, productID)
 			} else {
-				http.Error(w, "Product out of stock", http.StatusConflict)
+				http.Error(w, "Not enough stock", http.StatusConflict)
 			}
 			found = true
 			break
