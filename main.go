@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/gorilla/mux"
 )
@@ -60,6 +61,23 @@ func createProduct(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(newProduct)
 }
 
+func getProduct(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	productID, err := strconv.Atoi(vars["id"])
+
+	if err != nil {
+		fmt.Fprintf(w, "Invalid ID")
+		return
+	}
+
+	for _, product := range products {
+		if product.ID == productID {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(product)
+		}
+	}
+}
+
 func indexRoute(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Welcome to my API")
 }
@@ -72,6 +90,7 @@ func main() {
 	router.HandleFunc("/", indexRoute)
 	router.HandleFunc("/products", getProducts).Methods("GET")
 	router.HandleFunc("/products", createProduct).Methods("POST")
+	router.HandleFunc("/products/{id}", getProduct).Methods("GET")
 
 	// Server HTTP
 	log.Fatal(http.ListenAndServe(":4567", router))
