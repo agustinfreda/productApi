@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -32,6 +33,12 @@ var products = allProducts{
 	},
 }
 
+// PRODUCT FUNCTIONS
+func getProducts(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(products)
+}
+
 func indexRoute(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Welcome to my API")
 }
@@ -42,6 +49,7 @@ func main() {
 
 	// Rutas
 	router.HandleFunc("/", indexRoute)
+	router.HandleFunc("/products", getProducts).Methods("GET")
 
 	// Server HTTP
 	log.Fatal(http.ListenAndServe(":4567", router))
