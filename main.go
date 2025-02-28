@@ -100,7 +100,7 @@ func updateProduct(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	productID, err := strconv.Atoi(vars["id"])
 
-	var updatedProduct product
+	var updatedProduct Product
 
 	if err != nil {
 		fmt.Fprintf(w, "Invalid ID")
