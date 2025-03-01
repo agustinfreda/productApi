@@ -9,7 +9,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/mux"
 )
 
@@ -34,6 +36,26 @@ var products = allProducts{
 		Name:  "Product Two",
 		Price: 100,
 		Stock: 20,
+	},
+}
+
+type Credentials struct {
+	Username string `json:Username`
+	Password string `json:Password`
+}
+
+var secretKey = []byte("miClaveSecreta")
+
+type allCredentials []Credentials
+
+var usersRegistered = allCredentials{
+	{
+		Username: "agustinfreda",
+		Password: "12345678",
+	},
+	{
+		Username: "ri-ma1",
+		Password: "josefue",
 	},
 }
 
@@ -188,18 +210,149 @@ func indexRoute(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Welcome to my API")
 }
 
+func generateJWT(username string) (string, error) {
+	// Definir los claims del token
+	claims := jwt.MapClaims{
+		"username": username,
+		"exp":      time.Now().Add(time.Hour * 72).Unix(), // El token expira en 72 horas
+	}
+
+	// Crear el token con los claims y la firma
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	// Firmar el token usando la clave secreta
+	signedToken, err := token.SignedString(secretKey)
+	if err != nil {
+		return "", err
+	}
+
+	return signedToken, nil
+}
+
+func login(w http.ResponseWriter, r *http.Request) {
+	var creds Credentials
+	err := json.NewDecoder(r.Body).Decode(&creds)
+	if err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	for _, user := range usersRegistered {
+		if user.Username == creds.Username && user.Password == creds.Password {
+			token, err := generateJWT(creds.Username)
+			if err != nil {
+				http.Error(w, "Could not generate token", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"token": token})
+			return
+		}
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized", "message": "Missing or invalid token"})
+
+}
+
+func verifyToken(w http.ResponseWriter, r *http.Request) (*jwt.Token, error) {
+	// Obtener el token de la cabecera Authorization
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		http.Error(w, "Missing authorization header", http.StatusUnauthorized)
+		return nil, nil
+	}
+
+	// El token generalmente es enviado en el formato "Bearer <token>"
+	parts := strings.Split(authHeader, " ")
+	if len(parts) != 2 {
+		http.Error(w, "Authorization header format must be Bearer <token>", http.StatusUnauthorized)
+		return nil, nil
+	}
+
+	// El token es la segunda parte (después de "Bearer")
+	tokenString := parts[1]
+
+	// Parsear el token con la clave secreta
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		// Verifica si el método de firma es el correcto
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, http.ErrNotSupported
+		}
+
+		// Devuelve la clave secreta para validar la firma
+		return secretKey, nil
+	})
+
+	if err != nil {
+		http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
+		return nil, err
+	}
+
+	if !token.Valid {
+		http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
+		return nil, nil
+	}
+
+	return token, nil
+}
+
+// Middleware que verifica el JWT en las solicitudes
+// Middleware que verifica el JWT en las solicitudes
+// Middleware que verifica el JWT en las solicitudes
+func tokenVerifyMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verificar si hay un token en la cabecera
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			http.Error(w, "Missing authorization header", http.StatusUnauthorized)
+			return // Si no hay token, responde con el error y no ejecuta la siguiente función
+		}
+
+		// El token generalmente es enviado en el formato "Bearer <token>"
+		parts := strings.Split(authHeader, " ")
+		if len(parts) != 2 {
+			http.Error(w, "Authorization header format must be Bearer <token>", http.StatusUnauthorized)
+			return
+		}
+
+		// El token es la segunda parte (después de "Bearer")
+		tokenString := parts[1]
+
+		// Parsear el token con la clave secreta
+		_, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			// Verifica si el método de firma es el correcto
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, http.ErrNotSupported
+			}
+			return secretKey, nil
+		})
+
+		if err != nil {
+			http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
+			return // Si el token no es válido, también se detiene la ejecución
+		}
+
+		// Si el token es válido, continúa con el siguiente handler
+		next(w, r)
+	})
+}
+
 func main() {
 	// Enrutador
 	router := mux.NewRouter().StrictSlash(true)
 
-	// Rutas
+	// Rutas públicas
 	router.HandleFunc("/", indexRoute)
-	router.HandleFunc("/products", getProducts).Methods("GET")
-	router.HandleFunc("/products", createProduct).Methods("POST")
-	router.HandleFunc("/products/{id}", getProduct).Methods("GET")
-	router.HandleFunc("/products/{id}", deleteProduct).Methods("DELETE")
-	router.HandleFunc("/products/{id}", updateProduct).Methods("PUT")
-	router.HandleFunc("/products/{id}/sell", sellProduct).Methods("PUT")
+	router.HandleFunc("/login", login).Methods("POST")
+
+	// Rutas protegidas (requieren autenticación)
+	router.HandleFunc("/products", tokenVerifyMiddleware(getProducts)).Methods("GET")
+	router.HandleFunc("/products", tokenVerifyMiddleware(createProduct)).Methods("POST")
+	router.HandleFunc("/products/{id}", tokenVerifyMiddleware(getProduct)).Methods("GET")
+	router.HandleFunc("/products/{id}", tokenVerifyMiddleware(deleteProduct)).Methods("DELETE")
+	router.HandleFunc("/products/{id}", tokenVerifyMiddleware(updateProduct)).Methods("PUT")
+	router.HandleFunc("/products/{id}/sell", tokenVerifyMiddleware(sellProduct)).Methods("PUT")
 
 	// Server HTTP
 	log.Fatal(http.ListenAndServe(":4567", router))
