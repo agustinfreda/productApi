@@ -255,6 +255,76 @@ func login(w http.ResponseWriter, r *http.Request) {
 
 }
 
+var revokedTokens = make(map[string]bool) // Aquí guardamos los tokens revocados
+
+func logout(w http.ResponseWriter, r *http.Request) {
+	// Obtener el token del header Authorization
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		http.Error(w, "Missing authorization header", http.StatusUnauthorized)
+		return
+	}
+
+	// El token es la segunda parte (después de "Bearer")
+	parts := strings.Split(authHeader, " ")
+	if len(parts) != 2 {
+		http.Error(w, "Authorization header format must be Bearer <token>", http.StatusUnauthorized)
+		return
+	}
+	tokenString := parts[1]
+
+	// Agregar el token a la lista de revocados
+	revokedTokens[tokenString] = true
+
+	// Responder con un mensaje de éxito
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Logout successful"})
+}
+
+// Función para verificar si el token está revocado
+func isTokenRevoked(tokenString string) bool {
+	return revokedTokens[tokenString]
+}
+
+// Middleware que verifica si el token está revocado
+func tokenVerifyMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			http.Error(w, "Missing authorization header", http.StatusUnauthorized)
+			return
+		}
+
+		parts := strings.Split(authHeader, " ")
+		if len(parts) != 2 {
+			http.Error(w, "Authorization header format must be Bearer <token>", http.StatusUnauthorized)
+			return
+		}
+
+		tokenString := parts[1]
+		if isTokenRevoked(tokenString) {
+			http.Error(w, "Token has been revoked", http.StatusUnauthorized)
+			return
+		}
+
+		// Continuar con la validación del token
+		_, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, http.ErrNotSupported
+			}
+			return secretKey, nil
+		})
+
+		if err != nil {
+			http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
+			return
+		}
+
+		next(w, r)
+	})
+}
+
 func verifyToken(w http.ResponseWriter, r *http.Request) (*jwt.Token, error) {
 	// Obtener el token de la cabecera Authorization
 	authHeader := r.Header.Get("Authorization")
@@ -297,47 +367,6 @@ func verifyToken(w http.ResponseWriter, r *http.Request) (*jwt.Token, error) {
 	return token, nil
 }
 
-// Middleware que verifica el JWT en las solicitudes
-// Middleware que verifica el JWT en las solicitudes
-// Middleware que verifica el JWT en las solicitudes
-func tokenVerifyMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verificar si hay un token en la cabecera
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			http.Error(w, "Missing authorization header", http.StatusUnauthorized)
-			return // Si no hay token, responde con el error y no ejecuta la siguiente función
-		}
-
-		// El token generalmente es enviado en el formato "Bearer <token>"
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 {
-			http.Error(w, "Authorization header format must be Bearer <token>", http.StatusUnauthorized)
-			return
-		}
-
-		// El token es la segunda parte (después de "Bearer")
-		tokenString := parts[1]
-
-		// Parsear el token con la clave secreta
-		_, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			// Verifica si el método de firma es el correcto
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, http.ErrNotSupported
-			}
-			return secretKey, nil
-		})
-
-		if err != nil {
-			http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
-			return // Si el token no es válido, también se detiene la ejecución
-		}
-
-		// Si el token es válido, continúa con el siguiente handler
-		next(w, r)
-	})
-}
-
 func main() {
 	// Enrutador
 	router := mux.NewRouter().StrictSlash(true)
@@ -345,6 +374,7 @@ func main() {
 	// Rutas públicas
 	router.HandleFunc("/", indexRoute)
 	router.HandleFunc("/login", login).Methods("POST")
+	router.HandleFunc("/logout", logout).Methods("POST")
 
 	// Rutas protegidas (requieren autenticación)
 	router.HandleFunc("/products", tokenVerifyMiddleware(getProducts)).Methods("GET")
