@@ -325,48 +325,6 @@ func tokenVerifyMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	})
 }
 
-func verifyToken(w http.ResponseWriter, r *http.Request) (*jwt.Token, error) {
-	// Obtener el token de la cabecera Authorization
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		http.Error(w, "Missing authorization header", http.StatusUnauthorized)
-		return nil, nil
-	}
-
-	// El token generalmente es enviado en el formato "Bearer <token>"
-	parts := strings.Split(authHeader, " ")
-	if len(parts) != 2 {
-		http.Error(w, "Authorization header format must be Bearer <token>", http.StatusUnauthorized)
-		return nil, nil
-	}
-
-	// El token es la segunda parte (después de "Bearer")
-	tokenString := parts[1]
-
-	// Parsear el token con la clave secreta
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		// Verifica si el método de firma es el correcto
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, http.ErrNotSupported
-		}
-
-		// Devuelve la clave secreta para validar la firma
-		return secretKey, nil
-	})
-
-	if err != nil {
-		http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
-		return nil, err
-	}
-
-	if !token.Valid {
-		http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
-		return nil, nil
-	}
-
-	return token, nil
-}
-
 func main() {
 	// Enrutador
 	router := mux.NewRouter().StrictSlash(true)
